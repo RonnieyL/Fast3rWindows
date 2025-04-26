@@ -88,10 +88,14 @@ This will start the Gradio interface where you can upload images or video for re
 
 Process multiple images and export in various formats:
 ```powershell
-python convert.py --image_dir ./data/keyboard/images ^
-                  --output_dir ./outputs/keyboard ^
+python convert.py --image_dir path/to/data/images ^
+                  --output_dir path/to/outputs/ ^
+                  --checkpoint_dir path/to/checkpoint 
                   --image_size 512
 ```
+
+Initial run without checkpoint directory will build the model from hugging face.
+After that I recommend making a data folder, an output folder, and a modelckpt folder which holds the config.json and model.safetensors. You can find the model in your huggingface cache. 
 
 Outputs:
 - `scene.ply` - Colored global point cloud

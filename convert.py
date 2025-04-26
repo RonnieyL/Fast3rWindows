@@ -269,7 +269,7 @@ def main():
     p.add_argument("--output_dir",  required=True, type=Path,
                    help="destination folder")
     p.add_argument("--checkpoint_dir", type=Path,
-                   default=Path("modelckpt"),
+                   default=Path("--checkpoint_dir"),
                    help="Fast-3-R checkpoint directory")
     p.add_argument("--image_size", type=int, default=512,
                    help="resize long side to this (default 512)")
