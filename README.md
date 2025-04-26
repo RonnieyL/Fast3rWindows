@@ -43,8 +43,7 @@ conda create -n fast3r python=3.11 cmake=3.14.0 -y
 conda activate fast3r
 
 # PyTorch (+CUDA 12.4 runtime)
-conda install pytorch torchvision torchaudio pytorch-cuda=12.4 ^
-             nvidia/label/cuda-12.4.0::cuda-toolkit -c pytorch -c nvidia
+conda install pytorch torchvision torchaudio pytorch-cuda=12.4 nvidia/label/cuda-12.4.0::cuda-toolkit -c pytorch -c nvidia
 
 # PyTorch3D (compiled from source)  ⚠️ takes a while
 pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
@@ -76,6 +75,8 @@ We apply three tiny patches automatically when you import the repo:
 
 Simply run:
 ```powershell
+chcp 65001 
+set PYTHONUTF8=1
 python fast3r/viz/demo.py
 ```
 
@@ -106,28 +107,6 @@ For fast visualization without starting the full viser server:
 ```powershell
 python view_pc.py outputs/keyboard/scene.ply
 ```
-
-## Known Issues & Workarounds
-
-These warnings are benign and can be safely ignored:
-
-| Message | What it means | Impact |
-|---------|---------------|--------|
-| `Warning, cannot find cuda-compiled version of RoPE2D` | Using pure-PyTorch Rotary PE (≈3ms slower per image) | ❌ None |
-| `pl_bolts UnderReviewWarning ...` | Lightning-Bolts internal warning | ❌ None |
-| `encode_images time: ... something is wrong with the encoder` | Debug print (ignore unless time >1s per view) | ❌ None |
-
-## Future Implementations
-
-- **Enhanced CLI for `convert.py`**
-  - Flexible output format selection (PLY/NPY/COLMAP)
-  - Optional depth/confidence map exports
-- **Standalone Viser Viewer**
-  - Load existing reconstructions without re-running inference
-- **Windows-optimized Distribution**
-  - Pre-built PyTorch3D wheels
-  - Automatic VRAM management
-  - Batch GIF renderer for sequences
 
 ## Using Fast3R in Your Own Project
 
@@ -192,54 +171,28 @@ for view_idx, pred in enumerate(output_dict['preds']):
     print(f"Point Cloud Shape for view {view_idx}: {point_cloud.shape}")  # shape: (1, 368, 512, 3), i.e., (1, Height, Width, XYZ)
 ```
 
-## Training
 
-Train model with chosen experiment configuration from [configs/experiment/](configs/experiment/)
+## Known Issues & Workarounds
 
-```bash
-python fast3r/train.py experiment=super_long_training/super_long_training
-```
+These warnings are benign and can be safely ignored:
 
-You can override any parameter from command line following [Hydra override syntax](https://hydra.cc/docs/advanced/override_grammar/basic/):
+| Message | What it means | Impact |
+|---------|---------------|--------|
+| `Warning, cannot find cuda-compiled version of RoPE2D` | Using pure-PyTorch Rotary PE (≈3ms slower per image) | ❌ None |
+| `pl_bolts UnderReviewWarning ...` | Lightning-Bolts internal warning | ❌ None |
+| `encode_images time: ... something is wrong with the encoder` | Debug print (ignore unless time >1s per view) | ❌ None |
 
-```bash
-python fast3r/train.py experiment=super_long_training/super_long_training trainer.max_epochs=20 trainer.num_nodes=2
-```
+## Future Implementations
 
-To submit a multi-node training job with Slurm, use the following command:
-
-```bash
-python scripts/slurm/submit_train.py --nodes=<NODES> --experiment=<EXPERIMENT>
-```
-
-After training, you can run the demo with a lightning checkpoint with the following command:
-```bash
-python fast3r/viz/demo.py --is_lightning_checkpoint --checkpoint_dir=/path/to/super_long_training_999999
-```
-
-## Evaluation
-
-To evaluate on 3D reconstruction or camera pose estimation tasks, run:
-
-```bash
-python fast3r/eval.py eval=<eval_config>
-```
-`<eval_config>` can be any of the evaluation configurations in [configs/eval/](configs/eval/). For example:
-- `ablation_recon_better_inference_hp/ablation_recon_better_inference_hp` evaluates the 3D reconstruction on DTU, 7-Scenes and Neural-RGBD datasets.
-- `eval_cam_pose/eval_cam_pose_10views` evaluates the camera pose estimation on 10 views on CO3D dataset.
-
-
-To evaluate camera poses on RealEstate10K dataset, run:
-
-```bash
-python scripts/fast3r_re10k_pose_eval.py  --subset_file scripts/re10k_test_1800.txt
-```
-
-To evaluate multi-view depth estimation on Tanks and Temples, ETH-3D, DTU, and ScanNet datasets, follow the data download and preparation guide of [robustmvd](https://github.com/lmb-freiburg/robustmvd), install that repo's `requirements.txt` into the current conda environment, and run:
-
-```bash
-python scripts/robustmvd_eval.py
-```
+- **Enhanced CLI for `convert.py`**
+  - Flexible output format selection (PLY/NPY/COLMAP)
+  - Optional depth/confidence map exports
+- **Standalone Viser Viewer**
+  - Load existing reconstructions without re-running inference
+- **Windows-optimized Distribution**
+  - Pre-built PyTorch3D wheels
+  - Automatic VRAM management
+  - Batch GIF renderer for sequences
 
 ## Dataset Preprocessing
 
@@ -291,7 +244,3 @@ Fast3R is built upon a foundation of remarkable open-source projects. We deeply 
 - [Spann3R](https://hengyiwang.github.io/projects/spanner)
 - [Viser](https://viser.studio/main/)
 - [Lightning-Hydra-Template](https://github.com/ashleve/lightning-hydra-template)
-
-# Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=facebookresearch/fast3r&type=Date)](https://star-history.com/#facebookresearch/fast3r&Date)
