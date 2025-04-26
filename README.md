@@ -109,7 +109,7 @@ Outputs:
 
 For fast visualization without starting the full viser server:
 ```powershell
-python view_pc.py outputs/keyboard/scene.ply
+python view_pc.py output/reconstruction.ply
 ```
 
 ## Using Fast3R in Your Own Project
