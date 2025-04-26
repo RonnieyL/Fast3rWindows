@@ -18,71 +18,116 @@ Official implementation of **Fast3R: Towards 3D Reconstruction of 1000+ Images i
 
 *[Jianing Yang](https://jedyang.com/), [Alexander Sax](https://alexsax.github.io/), [Kevin J. Liang](https://kevinjliang.github.io/), [Mikael Henaff](https://www.mikaelhenaff.net/), [Hao Tang](https://tanghaotommy.github.io/), [Ang Cao](https://caoang327.github.io/), [Joyce Chai](https://web.eecs.umich.edu/~chaijy/), [Franziska Meier](https://fmeier.github.io/), [Matt Feiszli](https://www.linkedin.com/in/matt-feiszli-76b34b/)*
 
+## ⚠️ Prerequisites ⚠️  
+Before running **Fast3R for Windows** please make sure the *base* software stack is already in place.
+
+| What you need | Version | Where to get it | Notes |
+|---------------|---------|-----------------|-------|
+| **CUDA Toolkit** | 12.4 | [NVIDIA Downloads](https://developer.nvidia.com/cuda-downloads) | The installer adds *nvcc* & device libraries to *`%CUDA_PATH%`*. |
+| **GPU driver** | 550.xx or newer | GeForce / RTX Studio driver page | Must match the CUDA runtime shipped with PyTorch-CUDA 12.4. |
+| **Visual Studio Build Tools** | 2022 | [Microsoft](https://visualstudio.microsoft.com/visual-cpp-build-tools/) | Needed only once to compile PyTorch3D (≈ 10 min). |
+| **git** | any recent | [git-scm.com](https://git-scm.com/) | For cloning & pulling sub-modules. |
+
+> **Tip (UTF-8 console)** — open *PowerShell* and run **`chcp 65001`** once:  
+> it switches the current window to UTF-8 so progress bars / emojis show up correctly.
+
 ## Installation
 
-```bash
+```powershell
 # clone project
 git clone https://github.com/RonnieyL/Fast3rWindows
 cd Fast3rWindows
 
-# create conda environment
+# create conda env
 conda create -n fast3r python=3.11 cmake=3.14.0 -y
 conda activate fast3r
 
-# install PyTorch (adjust cuda version according to your system)
-conda install pytorch torchvision torchaudio pytorch-cuda=12.4 nvidia/label/cuda-12.4.0::cuda-toolkit -c pytorch -c nvidia
+# PyTorch (+CUDA 12.4 runtime)
+conda install pytorch torchvision torchaudio pytorch-cuda=12.4 ^
+             nvidia/label/cuda-12.4.0::cuda-toolkit -c pytorch -c nvidia
 
-# install PyTorch3D from source (the compilation will take a while)
-# export MAX_JOBS=6 # un-comment this if your machine is low on RAM (e.g., 16GB) when compiling PyTorch3D
+# PyTorch3D (compiled from source)  ⚠️ takes a while
 pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
-# unset MAX_JOBS
 
-# install requirements
+# project requirements
 pip install -r requirements.txt
 
-# install fast3r as a package (so you can import fast3r and use it in your own project)
+# install Fast3R package in-place
 pip install -e .
 ```
 
-Note: Please make sure to NOT install the cuROPE module like in DUSt3R - it would mess up the model's prediction.
+### Why doesn't the demo crash on Windows now?  
+We apply three tiny patches automatically when you import the repo:
 
-<details>
-<summary>Installation Troubleshooting</summary>
-
-If you encounter the error `fatal error: cuda_runtime.h: No such file or directory` when installing PyTorch3D, try setting `CUDA_HOME` before installing PyTorch3D:
-
-```bash
-export CUDA_HOME=/usr/local/cuda-12.4
-pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable"
-```
-</details>
+1. **UTF-8 everywhere** – at the top of `fast3r/viz/demo.py` we add  
+   ```python
+   if sys.platform == "win32":
+       sys.stdin.reconfigure(encoding="utf-8")
+       sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+       sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+   ```
+2. **ViserServerManager** – re-implemented with a *static* `run_worker` method so
+   the multiprocessing target is pickle-safe on Windows (prevents
+   `TypeError: cannot pickle '_thread.RLock' object`).
+3. **No `cuROPE`** – the README explicitly says *do not* install the DUSt3R
+   `cuROPE` extension; Fast3R already ships a pure-PyTorch fallback.
 
 ## Demo
 
-Use the following command to run the demo:
-
-```bash
+Simply run:
+```powershell
 python fast3r/viz/demo.py
 ```
-This will automatically download the pre-trained model weights and config from [Hugging Face Model](https://huggingface.co/jedyang97/Fast3R_ViT_Large_512).
 
-The demo is a Gradio interface where you can upload images or a video and visualize the 3D reconstruction and camera pose estimation.
+This will start the Gradio interface where you can upload images or video for reconstruction.
 
-`fast3r/viz/demo.py` also serves as an example of how to use the model for inference.
+## Command-line Utilities
 
-<div>
-  <img src="assets/fast3r_demo_upload.gif" width="45%" alt="Demo GIF 1" />
-  <img src="assets/fast3r_demo_control.gif" width="45%" alt="Demo GIF 2" style="margin-left: 5%;" />
-  <br>
-  <em>Left: Upload a video. Right: Visualize the 3D Reconstruction</em>
-</div>
+### `convert.py` — Batch Processing to COLMAP Format
 
-<details>
-<summary>Click here to see example of: visualize confidence heatmap + play frame by frame + render a GIF</summary>
-<div style="display: flex; justify-content: center;">
-  <img src="assets/fast3r_demo_coloring.gif" width="100%" alt="Demo GIF 3" />
-</div>
-</details>
+Process multiple images and export in various formats:
+```powershell
+python convert.py --image_dir ./data/keyboard/images ^
+                  --output_dir ./outputs/keyboard ^
+                  --image_size 512
+```
+
+Outputs:
+- `scene.ply` - Colored global point cloud
+- `poses_c2w.npy` - 4×4 extrinsics matrices
+- `intrinsics.npz` - Focal lengths and dimensions per view
+- COLMAP format files (`cameras.txt`, `images.txt`, `points3D.txt`)
+
+**Note:** Use `--image_size 224` when processing >20 images on GPUs with ≤8GB VRAM.
+
+### `view_pc.py` — Quick Point Cloud Viewer
+
+For fast visualization without starting the full viser server:
+```powershell
+python view_pc.py outputs/keyboard/scene.ply
+```
+
+## Known Issues & Workarounds
+
+These warnings are benign and can be safely ignored:
+
+| Message | What it means | Impact |
+|---------|---------------|--------|
+| `Warning, cannot find cuda-compiled version of RoPE2D` | Using pure-PyTorch Rotary PE (≈3ms slower per image) | ❌ None |
+| `pl_bolts UnderReviewWarning ...` | Lightning-Bolts internal warning | ❌ None |
+| `encode_images time: ... something is wrong with the encoder` | Debug print (ignore unless time >1s per view) | ❌ None |
+
+## Future Implementations
+
+- **Enhanced CLI for `convert.py`**
+  - Flexible output format selection (PLY/NPY/COLMAP)
+  - Optional depth/confidence map exports
+- **Standalone Viser Viewer**
+  - Load existing reconstructions without re-running inference
+- **Windows-optimized Distribution**
+  - Pre-built PyTorch3D wheels
+  - Automatic VRAM management
+  - Batch GIF renderer for sequences
 
 ## Using Fast3R in Your Own Project
 
