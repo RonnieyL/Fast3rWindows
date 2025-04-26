@@ -25,7 +25,7 @@ trimesh
 roma
 open3d
 einops
-deepspeed
+deepspeed==0.15.0
 gradio
 matplotlib
 tqdm

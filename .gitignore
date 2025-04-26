@@ -151,6 +151,18 @@ dmypy.json
 *.tar
 *.tar.gz
 
+# Data folder - ignore everything inside
+data/**
+!data/.gitkeep
+
+# Output folder - ignore everything inside
+output/**
+!output/.gitkeep
+
+#models folder - ignore everything inside
+modelckpt/**
+!modelckpt/.gitkeep
+
 # Lightning-Hydra-Template
 configs/local/default.yaml
 /data/

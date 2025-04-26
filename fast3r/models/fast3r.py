@@ -324,8 +324,8 @@ class Fast3R(nn.Module,
         if encode_images_end_time - encode_images_start_time > 20:
             print(f"something is wrong with the encoder, it took: {encode_images_end_time - encode_images_start_time}")
             # print the image and true_shape
-            for view_idx, view in enumerate(views):
-                print(f"view_idx: {view_idx}\n, view name: {view_name(view)}\n, image content: {view['img']}\n, true_shape: {view['true_shape']}")
+            #for view_idx, view in enumerate(views):
+                #print(f"view_idx: {view_idx}\n, view name: {view_name(view)}\n, image content: {view['img']}\n, true_shape: {view['true_shape']}")
 
         # Create image IDs for each patch
         pos_emb_start_time = time.time()

@@ -22,8 +22,8 @@ Official implementation of **Fast3R: Towards 3D Reconstruction of 1000+ Images i
 
 ```bash
 # clone project
-git clone https://github.com/facebookresearch/fast3r
-cd fast3r
+git clone https://github.com/RonnieyL/Fast3rWindows
+cd Fast3rWindows
 
 # create conda environment
 conda create -n fast3r python=3.11 cmake=3.14.0 -y

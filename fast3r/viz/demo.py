@@ -10,6 +10,12 @@
 Upload multiple unordered images of a scene, and Fast3R predicts 3D reconstructions and camera poses in one forward pass.
 The images do not need to come from the same camera (e.g. iPhone, DSLR) and can be in different aspect ratios.
 """
+import sys
+if sys.platform == "win32":
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+
 
 import os
 import time
@@ -61,190 +67,126 @@ def run_viser_server(pipe_conn, output, min_conf_thr_percentile, global_conf_thr
 # -------------------------------
 # ViserServerManager
 # -------------------------------
-class ViserServerManager:
-    """
-    Manages visualization servers launched as separate processes.
-    """
-    def __init__(self, req_queue, resp_queue):
-        self.req_queue = req_queue
-        self.resp_queue = resp_queue
-        self.servers = {}  # server_id -> server info
-        self.session_servers = {}  # session_id -> list of server_ids
-        self.console = Console()
-        self.next_server_id = 1
 
-    def run(self):
-        self.console.log("[bold green]ViserServerManager started[/bold green]")
+class ViserServerManager:
+    @staticmethod
+    def run_worker(req_queue, resp_queue):
+        """Worker process entry point (static method)"""
+        from rich.console import Console 
+        console = Console()
+        console.log("[bold green]ViserServerManager started[/bold green]")
+
+        servers = {}          # server_id -> server info
+        session_servers = {}  # session_id -> list of server_ids
+        next_server_id = 1
+
         while True:
             try:
-                cmd = self.req_queue.get(timeout=1)
+                cmd = req_queue.get(timeout=1)
             except Exception:
                 continue
 
-            # Extract message_id if present
             message_id = cmd.get("message_id")
             
             if cmd["cmd"] == "launch":
-                server_id = self.next_server_id
-                self.next_server_id += 1
+                server_id = next_server_id
+                next_server_id += 1
                 session_id = cmd.get("session_id", f"default_session_{server_id}")
                 
-                self.console.log(f"Launching viser server with id {server_id} for session {session_id} (message_id: {message_id})")
+                console.log(f"Launching viser server {server_id} for session {session_id}")
                 try:
-                    output = cmd["output"]
                     parent_conn, child_conn = mp.Pipe()
                     p = mp.Process(
                         target=run_viser_server,
-                        args=(
-                            child_conn,
-                            output,
-                            cmd.get("min_conf_thr_percentile", 10),
-                            cmd.get("global_conf_thr_value_to_drop_view", 1.5),
-                            cmd.get("point_size", 0.0004),
-                        )
+                        args=(child_conn, cmd["output"], 
+                              cmd.get("min_conf_thr_percentile", 10),
+                              cmd.get("global_conf_thr_value_to_drop_view", 1.5),
+                              cmd.get("point_size", 0.0004))
                     )
                     p.start()
                     child_conn.close()
+                    
                     result = parent_conn.recv()
                     if "error" in result:
-                        self.console.log(f"[red]Error launching server: {result['error']}[/red]")
-                        self.resp_queue.put({
-                            "cmd": "launch", 
-                            "error": result["error"],
-                            "message_id": message_id
-                        })
+                        console.log(f"[red]Error: {result['error']}[/red]")
+                        resp_queue.put({"cmd": "launch", "error": result["error"], "message_id": message_id})
                         p.terminate()
-                        p.join(timeout=5)
                     else:
-                        share_url = result["share_url"]
-                        self.servers[server_id] = {"share_url": share_url, "process": p, "session_id": session_id}
-                        
-                        # Track which servers belong to which session
-                        if session_id not in self.session_servers:
-                            self.session_servers[session_id] = []
-                        self.session_servers[session_id].append(server_id)
-                        
-                        self.console.log(f"Server {server_id} launched with URL {share_url} (pid: {p.pid}) for session {session_id}")
-                        self.resp_queue.put({
-                            "cmd": "launch", 
-                            "server_id": server_id, 
-                            "session_id": session_id,
-                            "share_url": share_url,
+                        servers[server_id] = {
+                            "share_url": result["share_url"],
+                            "process": p,
+                            "session_id": session_id
+                        }
+                        session_servers.setdefault(session_id, []).append(server_id)
+                        resp_queue.put({
+                            "cmd": "launch",
+                            "server_id": server_id,
+                            "share_url": result["share_url"],
                             "message_id": message_id
                         })
+
                 except Exception as e:
-                    self.console.log(f"[red]Error launching server: {e}[/red]")
-                    self.resp_queue.put({
-                        "cmd": "launch", 
-                        "error": str(e),
-                        "message_id": message_id
-                    })
+                    console.log(f"[red]Launch error: {e}[/red]")
+                    resp_queue.put({"cmd": "launch", "error": str(e), "message_id": message_id})
 
             elif cmd["cmd"] == "terminate_server":
                 server_id = cmd["server_id"]
-                if server_id in self.servers:
-                    process = self.servers[server_id].get("process")
-                    session_id = self.servers[server_id].get("session_id")
-                    self.console.log(f"Terminating server with id {server_id} (pid: {process.pid if process else 'N/A'}) from session {session_id}")
+                if server_id in servers:
+                    proc = servers[server_id]["process"]
+                    session_id = servers[server_id]["session_id"]
                     try:
-                        if process is not None:
-                            process.kill()
-                            process.join(timeout=10)
-                        
-                        # Remove from session tracking
-                        if session_id in self.session_servers and server_id in self.session_servers[session_id]:
-                            self.session_servers[session_id].remove(server_id)
-                            if not self.session_servers[session_id]:  # If empty list
-                                del self.session_servers[session_id]
-                        
-                        del self.servers[server_id]
-                        self.resp_queue.put({
-                            "cmd": "terminate_server", 
-                            "server_id": server_id, 
-                            "status": "terminated",
-                            "message_id": message_id
-                        })
+                        proc.kill()
+                        proc.join()
+                        session_servers[session_id].remove(server_id)
+                        if not session_servers[session_id]:
+                            del session_servers[session_id]
+                        del servers[server_id]
+                        resp_queue.put({"cmd": "terminate_server", "server_id": server_id, "status": "terminated", "message_id": message_id})
                     except Exception as e:
-                        self.console.log(f"[red]Error terminating server {server_id}: {e}[/red]")
-                        self.resp_queue.put({
-                            "cmd": "terminate_server", 
-                            "server_id": server_id, 
-                            "error": str(e),
-                            "message_id": message_id
-                        })
+                        resp_queue.put({"cmd": "terminate_server", "error": str(e), "message_id": message_id})
                 else:
-                    self.console.log(f"[red]Server with id {server_id} not found[/red]")
-                    self.resp_queue.put({
-                        "cmd": "terminate_server", 
-                        "server_id": server_id, 
-                        "error": "ID not found",
-                        "message_id": message_id
-                    })
-            
+                    resp_queue.put({"cmd": "terminate_server", "error": "Server not found", "message_id": message_id})
+
             elif cmd["cmd"] == "terminate_session":
                 session_id = cmd["session_id"]
-                if session_id in self.session_servers:
-                    server_ids = self.session_servers[session_id].copy()  # Copy to avoid modification during iteration
-                    self.console.log(f"Terminating all servers for session {session_id}: {server_ids}")
-                    
-                    terminated_servers = []
-                    errors = []
-                    
-                    for server_id in server_ids:
-                        if server_id in self.servers:
-                            process = self.servers[server_id].get("process")
+                terminated = []
+                errors = []
+                if session_id in session_servers:
+                    for sid in session_servers[session_id].copy():
+                        if sid in servers:
                             try:
-                                if process is not None:
-                                    process.kill()
-                                    process.join(timeout=10)
-                                del self.servers[server_id]
-                                terminated_servers.append(server_id)
+                                servers[sid]["process"].kill()
+                                servers[sid]["process"].join()
+                                del servers[sid]
+                                terminated.append(sid)
                             except Exception as e:
-                                errors.append(f"Error terminating server {server_id}: {e}")
-                    
-                    # Clean up session tracking
-                    if session_id in self.session_servers:
-                        del self.session_servers[session_id]
-                    
-                    self.resp_queue.put({
-                        "cmd": "terminate_session", 
-                        "session_id": session_id, 
-                        "terminated_servers": terminated_servers,
+                                errors.append(str(e))
+                    del session_servers[session_id]
+                    resp_queue.put({
+                        "cmd": "terminate_session",
+                        "terminated_servers": terminated,
                         "errors": errors,
-                        "status": "terminated" if not errors else "partial_termination",
                         "message_id": message_id
                     })
                 else:
-                    self.console.log(f"[red]No servers found for session {session_id}[/red]")
-                    self.resp_queue.put({
-                        "cmd": "terminate_session", 
-                        "session_id": session_id, 
-                        "error": "Session ID not found",
-                        "message_id": message_id
-                    })
+                    resp_queue.put({"cmd": "terminate_session", "error": "Session not found", "message_id": message_id})
+
             else:
-                self.console.log(f"Unknown command: {cmd}")
-                self.resp_queue.put({
-                    "cmd": "error", 
-                    "error": "Unknown command",
-                    "message_id": message_id
-                })
+                resp_queue.put({"cmd": "error", "error": "Unknown command", "message_id": message_id}) 
 
 
 # -------------------------------
 # start_manager
 # -------------------------------
 def start_manager():
-    """
-    Starts the ViserServerManager.
-    
-    Returns: req_queue, resp_queue, manager_process.
-    """
-    req_queue = mp.Queue()
-    resp_queue = mp.Queue()
-    manager_process = mp.Process(target=ViserServerManager(req_queue, resp_queue).run)
-    manager_process.start()
-    return req_queue, resp_queue, manager_process
+        req_queue = mp.Queue()
+        resp_queue = mp.Queue()
+        manager_process = mp.Process(
+            target=ViserServerManager.run_worker,
+            args=(req_queue, resp_queue)
+        )
+        manager_process.start()
+        return req_queue, resp_queue, manager_process
 
 
 # -------------------------------
@@ -333,7 +275,7 @@ def process_images(uploaded_files, video_file, state,
             'num_images': len(filelist),
             'source_type': 'video' if video_file else 'images'
         }
-        with open(os.path.join(save_dir, 'metadata.json'), 'w') as f:
+        with open(os.path.join(save_dir, 'metadata.json'), 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
     else:
         # For examples, just use the original file paths but still save metadata
@@ -351,7 +293,7 @@ def process_images(uploaded_files, video_file, state,
             'source_type': 'example',
             'example_name': os.path.basename(video_file) if video_file else None
         }
-        with open(os.path.join(example_dir, 'metadata.json'), 'w') as f:
+        with open(os.path.join(example_dir, 'metadata.json'), 'w', encoding='utf-8') as f:
             json.dump(example_metadata, f, indent=2)
     
     # Define a constant loading message.
@@ -709,10 +651,10 @@ def handle_feedback(feedback_type, timestamp, output_dir):
         # Update the metadata file
         metadata_path = os.path.join(dst_dir, "metadata.json")
         if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
             metadata['feedback_type'] = feedback_type
-            with open(metadata_path, 'w') as f:
+            with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2)
         # print that the feedback was saved
         print(f"Feedback saved to {dst_dir}")
@@ -724,10 +666,10 @@ def handle_feedback(feedback_type, timestamp, output_dir):
         # For example scenes, just update the metadata without moving
         metadata_path = os.path.join(example_dir, "metadata.json")
         if os.path.exists(metadata_path):
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
             metadata['feedback_type'] = feedback_type
-            with open(metadata_path, 'w') as f:
+            with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, indent=2)
         print(f"Feedback saved for example scene: {example_dir}")
         return True
