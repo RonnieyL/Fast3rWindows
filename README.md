@@ -198,7 +198,7 @@ These warnings are benign and can be safely ignored:
 
 The goal is that one can directly use the outputs of convert.py in a gaussian splatting pipeline such as Gsplat (from UC Berkeley) or the original Gaussian Splatting pipeline (from the Kerbl paper)
 
-![Teaser] (assets/fast3r_samplesplat.png)
+(assets/fast3r_samplesplat.png)
 
 ## Future Implementations
 
