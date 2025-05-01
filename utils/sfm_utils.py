@@ -271,9 +271,9 @@ def save_points3D(sparse_path, imgs, pts3d, confs, masks=None, use_masks=True, s
         pts = np.array(pts3d)
         col = np.array(imgs)
         confs = np.array(confs)
-
+ 
     pts = pts.reshape(-1, 3)
-    col = col.reshape(-1, 3) * 255.
+    col = col.reshape(-1, 3) 
     confs = confs.reshape(-1, 1)
 
     co_mask_dsp_pts_num = pts.shape[0]
@@ -293,24 +293,27 @@ def save_points3D(sparse_path, imgs, pts3d, confs, masks=None, use_masks=True, s
     if confs is not None:
         np.save(sparse_path / 'confidence_dsp.npy', confs)
 
+    # Create points3D dictionary for COLMAP format
+    points3D = {}
+    for i in range(len(pts)):
+        # Create a proper Point3D object instead of a dict
+        point3D = Point3D(
+            id=i,  # Point ID
+            xyz=pts[i],  # 3D coordinates
+            rgb=np.clip(col[i], 0, 255).astype(np.uint8),  # RGB colors
+            error=0.0,  # Error metric (we set to 0)
+            image_ids=np.array([], dtype=np.int64),  # No image associations
+            point2D_idxs=np.array([], dtype=np.int64)  # No 2D point indices
+        )
+        points3D[i] = point3D
+
+    # Write binary format
+    from scene.colmap_loader import write_points3D_binary
+    write_points3D_binary(points3D, sparse_path / 'points3D.bin')
+
     if save_all_pts:
         np.save(sparse_path / 'points3D_all.npy', pts3d)
         np.save(sparse_path / 'pointsColor_all.npy', imgs)
-
-    from scene.colmap_loader import Point3D, write_points3D_binary
-
-    points3D_dict = {}
-    for i, (xyz, rgb) in enumerate(zip(pts, col), start=1):
-        points3D_dict[i] = Point3D(
-            id=i,
-            xyz=np.asarray(xyz,  dtype=np.float64),   # ← make ndarray
-            rgb=np.asarray(rgb, dtype=np.uint8), # ← make ndarray
-            error=0.0,
-            image_ids=np.empty(0, dtype=np.int32),
-            point2D_idxs=np.empty(0, dtype=np.int32),
-        )
-
-    write_points3D_binary(points3D_dict, points3D_bin_file)
     
     # Write pts_num.txt
     if isinstance(save_txt_path, str):

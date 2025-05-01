@@ -87,21 +87,22 @@ This will start the Gradio interface where you can upload images or video for re
 ### `convert.py` — Batch Processing to COLMAP Format
 
 Process multiple images and export in various formats:
-```powershell
+```python
 python convert.py --image_dir path/to/data/images ^
                   --output_dir path/to/outputs/ ^
                   --checkpoint_dir path/to/checkpoint 
                   --image_size 512
+                  --keep_percent percent of the final point cloud you wish to keep #set to 0.1 by default, should be increased or decreased based on # of images used and density of point cloud
 ```
 
 Initial run without checkpoint directory will build the model from hugging face.
 After that I recommend making a data folder, an output folder, and a modelckpt folder which holds the config.json and model.safetensors. You can find the model in your huggingface cache. 
 
 Outputs:
-- `scene.ply` - Colored global point cloud
+- `reconstruction.ply` - Colored global point cloud
 - `poses_c2w.npy` - 4×4 extrinsics matrices
 - `intrinsics.npz` - Focal lengths and dimensions per view
-- COLMAP format files (`cameras.txt`, `images.txt`, `points3D.txt`)
+- COLMAP format files (`cameras.bin`, `images.bin`, `points3D.bin`)
 
 **Note:** Use `--image_size 224` when processing >20 images on GPUs with ≤8GB VRAM.
 
@@ -110,6 +111,13 @@ Outputs:
 For fast visualization without starting the full viser server:
 ```powershell
 python view_pc.py output/reconstruction.ply
+```
+
+### `visualize.py` - Quick COLMAP Scene Viewer
+
+For fast visualization of COLMAP bins without starting a Viser server:
+```powershell
+python visualize.py path/to/sparse/0
 ```
 
 ## Using Fast3R in Your Own Project
@@ -185,6 +193,12 @@ These warnings are benign and can be safely ignored:
 | `Warning, cannot find cuda-compiled version of RoPE2D` | Using pure-PyTorch Rotary PE (≈3ms slower per image) | ❌ None |
 | `pl_bolts UnderReviewWarning ...` | Lightning-Bolts internal warning | ❌ None |
 | `encode_images time: ... something is wrong with the encoder` | Debug print (ignore unless time >1s per view) | ❌ None |
+
+## Intended Use
+
+The goal is that one can directly use the outputs of convert.py in a gaussian splatting pipeline such as Gsplat (from UC Berkeley) or the original Gaussian Splatting pipeline (from the Kerbl paper)
+
+![Teaser] (assets/fast3r_samplesplat.png)
 
 ## Future Implementations
 

@@ -155,9 +155,12 @@ dmypy.json
 data/**
 !data/.gitkeep
 
+
 # Output folder - ignore everything inside
 output/**
 !output/.gitkeep
+runs
+
 
 #models folder - ignore everything inside
 modelckpt/**
